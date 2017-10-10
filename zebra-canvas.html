@@ -1,0 +1,296 @@
+<head>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            border: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        function distance(x1, y1, x2, y2) {
+            var dx = x2 - x1,
+                dy = y2 - y1;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+        
+        var canvas = document.createElement("canvas");
+        var context = canvas.getContext('2d');
+        document.body.appendChild(canvas);
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        var mouseX = 0, mouseY = 0;
+        
+        function drawCircle() {
+            context.beginPath();
+            context.arc(50, 50, 30, 0, 2 * Math.PI, false);
+            context.closePath();
+        }
+        function drawSquare() {
+            context.beginPath();
+            context.moveTo(25, 25);
+            context.lineTo(75, 25);
+            context.lineTo(75, 75);
+            context.lineTo(25, 75);
+            context.closePath();
+        }
+        function drawTriangle() {
+            context.beginPath();
+            context.moveTo(50, 20);
+            context.lineTo(80, 80);
+            context.lineTo(20, 80);
+            context.closePath();
+        }
+        function drawRectangle() {
+            context.beginPath();
+            context.moveTo(10, 30);
+            context.lineTo(90, 30);
+            context.lineTo(90, 70);
+            context.lineTo(10, 70);
+            context.closePath();
+        }
+        function drawStar() {
+            context.beginPath();
+            context.moveTo(50, 10);
+            for (var i = 1; i <= 10; i++) {
+                var a = i * Math.PI * 2 / 10 - Math.PI / 2;
+                var r = i % 2 === 0 ? 40 : 40 * 0.381966;
+                context.lineTo(50 + Math.cos(a) * r, 50 + Math.sin(a) * r);
+            }
+            context.closePath();
+        }
+        function drawHalfCircle() {
+            context.beginPath();
+            context.arc(50, 25, 50, 0, Math.PI, false);
+            context.closePath();
+        }
+        function drawPentagon() {
+            context.beginPath();
+            context.moveTo(50, 15);
+            for (var i = 0; i < 5; i++) {
+                var a = i * Math.PI * 2 / 5 - Math.PI / 2;
+                context.lineTo(50 + Math.cos(a) * 35, 50 + Math.sin(a) * 35);
+            }
+            context.closePath();
+        }
+        
+        var rowShapes = [drawCircle, drawSquare, drawTriangle, drawRectangle, drawStar];
+        function range(n) { var a = []; for (var i = 0; i < n; i++) a.push(i); return a; }
+        
+        var holes = [];
+        for (var row = 0; row < 5; row++) {
+            for (var col = 0; col < 5; col++) {
+                holes.push({ shape: rowShapes[row], x: 50 + col * 150, y: 50 + row * 100 });
+            }
+        }
+        holes[5].shape = drawHalfCircle;
+        holes[17].shape = drawPentagon;
+        
+        var blocks = [];
+        var constraints = [];
+        (() => {
+            function makeGroup(a, b, color, constraintType) {
+                a.color = color;
+                b.color = color;
+                var d = distance(a.x, a.y, b.x, b.y);
+                if (constraintType === "distance") {
+                    constraints.push({ type: "distance", a: a, b: b, min: d - 20, max: d + 20 });
+                } else if (constraintType === "horizontal") {
+                    constraints.push({ type: constraintType, a: a, b: b, spacing: b.x - a.x });
+                } else if (constraintType === "vertical") {
+                    constraints.push({ type: constraintType, a: a, b: b, spacing: b.y - a.y });
+                }
+            }
+            var blockRows = [0, 1, 2, 3, 4].map(row => {
+                return [0, 1, 2, 3, 4].map(col => {
+                    var block = {
+                        x: 50 + col * 150, y: 50 + row * 100, shape: rowShapes[row], color: 'magenta'
+                    };
+                    blocks.push(block);
+                    return block;
+                });
+            });
+            blockRows[1][0].shape = drawHalfCircle;
+            blockRows[3][2].shape = drawPentagon;
+            makeGroup(blockRows[0][0], blockRows[4][0], '#FF0000', "vertical");
+            makeGroup(blockRows[2][1], blockRows[4][0], '#FF0000', "distance");
+            makeGroup(blockRows[1][0], blockRows[0][1], '#0000FF', "distance");
+            makeGroup(blockRows[2][0], blockRows[4][1], '#00FFFF', "distance");
+            makeGroup(blockRows[1][1], blockRows[3][1], '#550088', "vertical");
+            makeGroup(blockRows[0][2], blockRows[1][2], '#FFFF00', "vertical");
+            makeGroup(blockRows[2][2], blockRows[4][2], '#FF8800', "vertical");
+            makeGroup(blockRows[1][3], blockRows[2][3], '#00FF00', "vertical");
+            makeGroup(blockRows[3][3], blockRows[4][3], '#EE55BB', "vertical");
+            makeGroup(blockRows[1][4], blockRows[4][4], '#999999', "vertical");
+            makeGroup(blockRows[0][3], blockRows[0][4], '#77BBFF', "horizontal");
+            makeGroup(blockRows[0][4], blockRows[3][4], '#77BBFF', "vertical");
+        })();
+        
+        function moveBlock(block, toX, toY) {
+            block.x = toX;
+            block.y = toY;
+            var seen = new Set();
+            seen.add(block);
+            var dirty = true;
+            var constrain = ({a: a, b: b, min: min, max: max, type: type, spacing: spacing}) => {
+                if (seen.has(a) === seen.has(b)) return;
+                if (seen.has(b)) {
+                    var t = a;
+                    a = b;
+                    b = t;
+                    spacing = -spacing;
+                }
+                seen.add(b);
+                if (type === "distance") {
+                    var d = distance(a.x, a.y, b.x, b.y);
+                    if (d < min || d > max) {
+                        var nd = Math.max(min, Math.min(max, d));
+                        b.x = a.x + Math.round((b.x - a.x) * nd / d);
+                        b.y = a.y + Math.round((b.y - a.y) * nd / d);
+                        dirty = true;
+                    }
+                } else if (type === "horizontal") {
+                    b.x = a.x + spacing;
+                    b.y = a.y;
+                    dirty = true;
+                } else if (type === "vertical") {
+                    b.y = a.y + spacing;
+                    b.x = a.x;
+                    dirty = true;
+                }
+            };
+            while (dirty) {
+                dirty = false;
+                constraints.forEach(constraint => constrain(constraint));
+            }
+        }
+        
+        var dragging = false;
+        
+        function draw() {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            // Draw holes
+            context.fillStyle = "black";
+            holes.forEach(hole => {
+                context.save();
+                context.translate(hole.x, hole.y);
+                hole.shape();
+                context.fill();
+                context.restore();
+            });
+            // Drag block
+            if (dragging !== false && typeof dragging.block !== "undefined") {
+                var block = dragging.block;
+                moveBlock(block, mouseX - dragging.dx, mouseY - dragging.dy);
+                holes.forEach(hole => {
+                    if (hole.shape === block.shape && distance(block.x, block.y, hole.x, hole.y) < 10) {
+                        moveBlock(block, hole.x, hole.y);
+                    }
+                });
+            }
+            // Draw constraints
+            constraints.forEach(constraint => {
+                context.strokeStyle = constraint.a.color;
+                context.beginPath();
+                context.moveTo(constraint.a.x + 50, constraint.a.y + 50);
+                context.lineTo(constraint.b.x + 50, constraint.b.y + 50);
+                context.closePath();
+                context.lineWidth = 5;
+                context.stroke();
+                if (constraint.type === "distance") {
+                    context.strokeStyle = "white";
+                    context.lineWidth = 2;
+                    context.stroke();
+                }
+            });
+            // Draw blocks
+            var pickDrag = dragging === true;
+            blocks.forEach(block => {
+                context.save();
+                context.translate(block.x, block.y);
+                context.fillStyle = block.color;
+                block.shape();
+                context.fill();
+                if (pickDrag === true && context.isPointInPath(mouseX, mouseY)) {
+                    dragging = { block: block, dx: mouseX - block.x, dy: mouseY - block.y };
+                }
+                if (dragging !== false && dragging.block === block) {
+                    context.strokeStyle = "black";
+                    context.lineWidth = 5;
+                    context.stroke();
+                }
+                context.restore();
+            });
+            
+            if (dragging === true) {
+                dragging = false;
+            }
+            
+            function checkComplete() {
+                for (var i = 0; i < holes.length; i++) {
+                    var hole = holes[i];
+                    if (blocks.filter(block => block.x === hole.x && block.y === hole.y && block.shape === hole.shape).length !== 1) {
+                        return false;
+                    };
+                }
+                return true;
+            }
+            if (checkComplete()) {
+                context.fillStyle = "black";
+                context.textAlign = "center";
+                context.font = "24px Arial";
+                context.fillText("You're the zebra now, dog!", 400, 600);
+            }
+        }
+        
+        function theGreatScrumbling() {
+            blocks.forEach(block => {
+                moveBlock(block, Math.round(Math.random() * 700), block.y);
+            });
+        }
+        
+        window.onmousedown = evt => {
+            if (evt.button === 0) {
+                dirty = true;
+                dragging = true;
+            }
+        }
+        window.onmouseup = evt => {
+            if (evt.button === 0) {
+                dirty = true;
+                dragging = false;
+            }
+        }
+        
+        var dirty = false;
+        window.onmousemove = evt => {
+            mouseX = evt.clientX;
+            mouseY = evt.clientY;
+            if (dragging !== false) {
+                dirty = true;
+            }
+        };
+        
+        window.onresize = () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            dirty = true;
+        }
+        
+        theGreatScrumbling();
+        draw();
+        function onTick() {
+            if (dirty) {
+                draw();
+                dirty = false;
+            }
+            requestAnimationFrame(onTick);
+        }
+        requestAnimationFrame(onTick);
+        // setInterval(draw, 100);
+    </script>
+</body>
